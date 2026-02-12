@@ -1,221 +1,190 @@
-import { useEffect, useState } from "react";
-import {
-    Container, Box, Typography, TextField, Button, Paper, Stack, Chip, type SxProps, type Theme
-} from '@mui/material';
+import { useState, useEffect, useMemo } from "react";
+// Import gaya UI Material (Style import satu per satu)
+import Box from '@mui/material/Box';
+import Container from '@mui/material/Container';
+import Typography from '@mui/material/Typography';
+import TextField from '@mui/material/TextField';
+import Button from '@mui/material/Button';
+import Paper from '@mui/material/Paper';
+import Stack from '@mui/material/Stack';
+import Avatar from '@mui/material/Avatar';
+import Skeleton from '@mui/material/Skeleton';
 
 // --- TIPE DATA ---
 type Post = {
-    id: string;
+    id?: string;      // Jaga-jaga kalau API pakai 'id'
+    _id?: string;     // Jaga-jaga kalau API pakai '_id'
     title: string;
     content: string;
-}
-
-// --- CONFIG WARNA & STYLE (Dark Neon) ---
-const themeColors = {
-    bgGradient: 'linear-gradient(to bottom right, #0f0c29, #302b63, #24243e)',
-    cardBg: 'rgba(40, 40, 55, 0.7)',
-    accent: '#7c4dff', // Ungu Neon
-    textPrimary: '#ffffff',
-    textSecondary: '#b0b0b0',
-    borderHighlight: '1px solid rgba(124, 77, 255, 0.3)',
-};
-
-const darkCardStyle: SxProps<Theme> = {
-    backgroundColor: themeColors.cardBg,
-    backdropFilter: 'blur(10px)',
-    border: themeColors.borderHighlight,
-    boxShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.3)',
-    borderRadius: '12px',
-    overflow: 'hidden',
-    transition: 'all 0.3s ease',
-    '&:hover': {
-        border: `1px solid ${themeColors.accent}`,
-        boxShadow: `0 0 15px ${themeColors.accent}40`,
-        transform: 'translateY(-2px)',
-    }
-};
-
-// --- LOGIC SORTING (Simple JavaScript) ---
-
-function sortMyPostsByTitle(dataAsli: Post[]) {
-    const dataBaru = [...dataAsli];
-    dataBaru.sort((a, b) => {
-        const titleA = a.title.toLowerCase();
-        const titleB = b.title.toLowerCase();
-        if (titleA < titleB) return -1;
-        if (titleA > titleB) return 1;
-        return 0;
-    });
-    return dataBaru;
-}
-
-function sortMyPostsById(dataAsli: Post[]) {
-    const dataBaru = [...dataAsli];
-    dataBaru.sort((a, b) => {
-        if (a.id < b.id) return -1;
-        if (a.id > b.id) return 1;
-        return 0;
-    });
-    return dataBaru;
-}
-
-
-// --- COMPONENT UTAMA ---
-export function PostList() {
-    const [posts, setPosts] = useState<Post[]>([]);
-    const [titleInput, setTitleInput] = useState('');
-
-    const reloadPost = async () => {
-        try {
-            const response = await fetch('http://localhost:5173/api/post');
-            if (!response.ok) return;
-            const data = await response.json();
-            setPosts(data.records || []);
-        } catch (error) {
-            console.error("Error", error);
-        }
+    createdAt: string;
+    author?: {
+        name: string;
     };
+}
 
+export function PostList() {
+    
+    // 1. State Management
+    const [posts, setPosts] = useState<Post[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [search, setSearch] = useState("");
+    const [sortBy, setSortBy] = useState<"date" | "title" | "user">("date");
+
+    // 2. Fetch Data (Fixed: Menggunakan 'records')
     useEffect(() => {
-        reloadPost();
+        const fetchData = async () => {
+            setLoading(true);
+            try {
+                const response = await fetch('http://localhost:5173/api/post');
+                const result = await response.json();
+                
+                // PERBAIKAN UTAMA: Cek 'records' dulu, baru 'data'
+                setPosts(result.records || result.data || []);
+                
+            } catch (error) {
+                console.error("Gagal ambil data", error);
+            } finally {
+                setLoading(false);
+            }
+        };
+        fetchData();
     }, []);
 
-    const addPost = async () => {
-        if (!titleInput) return;
-        try {
-            const response = await fetch('http://localhost:5173/api/post', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ title: titleInput, content: "New content created" })
-            });
-            if (response.status !== 200) {
-                await reloadPost();
-                setTitleInput('');
+    // 3. Logic Filter & Sort (Menggunakan useMemo untuk efisiensi)
+    const processedPosts = useMemo(() => {
+        // A. Filtering (Search)
+        let data = posts.filter((post) => {
+            const keyword = search.toLowerCase();
+            const titleMatch = (post.title || "").toLowerCase().includes(keyword);
+            const contentMatch = (post.content || "").toLowerCase().includes(keyword);
+            const authorMatch = (post.author?.name || "").toLowerCase().includes(keyword);
+            return titleMatch || contentMatch || authorMatch;
+        });
+
+        // B. Sorting
+        data.sort((a, b) => {
+            if (sortBy === "title") {
+                return (a.title || "").localeCompare(b.title || "");
+            } else if (sortBy === "user") {
+                const userA = a.author?.name || "z"; 
+                const userB = b.author?.name || "z";
+                return userA.localeCompare(userB);
+            } else {
+                // Default: Date (Newest first)
+                const dateA = new Date(a.createdAt || 0).getTime();
+                const dateB = new Date(b.createdAt || 0).getTime();
+                return dateB - dateA;
             }
-        } catch (error) {
-            console.error(error);
-        }
-    }
+        });
 
-    // --- Action Handlers ---
-    const clickSortTitle = () => {
-        const hasilSort = sortMyPostsByTitle(posts);
-        setPosts(hasilSort);
-    }
+        return data;
+    }, [posts, search, sortBy]);
 
-    const clickSortId = () => {
-        const hasilSort = sortMyPostsById(posts);
-        setPosts(hasilSort);
-    }
-
+    // --- RENDER UI (Dark Minimalist) ---
     return (
-        <Box sx={{
-            minHeight: '100vh', width: '100%', paddingY: 5,
-            background: themeColors.bgGradient,
-            color: themeColors.textPrimary,
+        <Box sx={{ 
+            bgcolor: '#000000', 
+            minHeight: '100vh', 
+            color: 'white', 
+            py: 5,
             fontFamily: 'sans-serif'
         }}>
-            <Container maxWidth="false">
+            <Container maxWidth="md">
                 
-                {/* HEADER */}
-                <Box display="flex" justifyContent="space-between" alignItems="center" mb={4}>
-                    <Box>
-                        <Typography variant="h3" sx={{ fontWeight: 800, background: `linear-gradient(45deg, #fff, ${themeColors.accent})`, backgroundClip: "text", textFillColor: "transparent" }}>
-                            Simple Posts
-                        </Typography>
-                        <Typography variant="subtitle2" sx={{ color: themeColors.textSecondary, mt: 0.5 }}>
-                            Total Data: {posts.length}
-                        </Typography>
-                    </Box>
-                    
-                    {/* Tombol Refresh Pakai Emoji */}
-                    <Button 
-                        onClick={reloadPost} 
-                        variant="outlined"
+                {/* Header */}
+                <Box mb={4}>
+                    <Typography variant="h4" fontWeight="bold" gutterBottom>
+                        Forum Posts.
+                    </Typography>
+                    <Typography variant="body2" sx={{ color: '#888' }}>
+                        Total Posts: {processedPosts.length}
+                    </Typography>
+                </Box>
+
+                {/* Controls: Search & Sort Buttons */}
+                <Box sx={{ display: 'flex', gap: 2, mb: 4, flexWrap: 'wrap' }}>
+                    <TextField 
+                        placeholder="Search topic..." 
+                        variant="outlined" 
+                        size="small"
+                        value={search}
+                        onChange={(e) => setSearch(e.target.value)}
                         sx={{ 
-                            minWidth: '50px', height: '50px', borderRadius: '50%', 
-                            fontSize: '1.5rem', borderColor: 'rgba(255,255,255,0.2)', color: 'white'
+                            flexGrow: 1, 
+                            bgcolor: '#121212', 
+                            borderRadius: 1,
+                            input: { color: 'white' },
+                            '& fieldset': { borderColor: '#333' }
                         }}
+                    />
+                    
+                    <Button 
+                        variant={sortBy === 'date' ? "contained" : "outlined"} 
+                        onClick={() => setSortBy('date')}
+                        sx={{ borderColor: '#333', color: sortBy === 'date' ? 'black' : 'white', bgcolor: sortBy === 'date' ? 'white' : 'transparent' }}
                     >
-                        🔄
+                        Newest
+                    </Button>
+                    <Button 
+                        variant={sortBy === 'title' ? "contained" : "outlined"} 
+                        onClick={() => setSortBy('title')}
+                        sx={{ borderColor: '#333', color: sortBy === 'title' ? 'black' : 'white', bgcolor: sortBy === 'title' ? 'white' : 'transparent' }}
+                    >
+                        Title
+                    </Button>
+                    <Button 
+                        variant={sortBy === 'user' ? "contained" : "outlined"} 
+                        onClick={() => setSortBy('user')}
+                        sx={{ borderColor: '#333', color: sortBy === 'user' ? 'black' : 'white', bgcolor: sortBy === 'user' ? 'white' : 'transparent' }}
+                    >
+                        User
                     </Button>
                 </Box>
 
-                {/* AREA INPUT & TOMBOL */}
-                <Paper elevation={0} sx={{ ...darkCardStyle, padding: 3, marginBottom: 4 }}>
-                    <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
-                        
-                        <TextField 
-                            variant="outlined" size="small" 
-                            value={titleInput}
-                            onChange={(e) => setTitleInput(e.target.value)}
-                            placeholder="✨ Tulis judul baru disini..."
-                            sx={{
-                                flexGrow: 1, 
-                                backgroundColor: 'rgba(255,255,255,0.05)', 
-                                borderRadius: 1,
-                                input: { color: 'white' },
-                                '& fieldset': { borderColor: 'rgba(255,255,255,0.2)' }
-                            }}
-                        />
-
-                        <Button variant="contained" onClick={addPost} sx={{ bgcolor: themeColors.accent, fontWeight: 'bold' }}>
-                            ➕ Add
-                        </Button>
-
-                        <Box sx={{ width: '1px', height: '30px', bgcolor: 'rgba(255,255,255,0.2)', mx: 1 }}></Box>
-
-                        {/* TOMBOL SORT (Tanpa Icon Library) */}
-                        <Button 
-                            variant="outlined" 
-                            onClick={clickSortId} 
-                            sx={{ color: '#b0b0b0', borderColor: 'rgba(255,255,255,0.2)' }}
-                        >
-                            🔢 Sort ID
-                        </Button>
-
-                        <Button 
-                            variant="outlined" 
-                            onClick={clickSortTitle} 
-                            sx={{ color: '#b0b0b0', borderColor: 'rgba(255,255,255,0.2)' }}
-                        >
-                            🔤 Sort Title
-                        </Button>
-
-                    </Box>
-                </Paper>
-
-                {/* DAFTAR POSTS */}
+                {/* Post List */}
                 <Stack spacing={2}>
-                    {posts.length > 0 ? (
-                        posts.map((post) => (
-                            <Paper key={post.id} sx={{ ...darkCardStyle, padding: 2.5, display: 'flex', gap: 2, alignItems: 'center' }}>
-                                {/* Chip ID */}
-                                <Chip 
-                                    label={"#" + post.id.substring(0, 6)} 
-                                    sx={{ 
-                                        bgcolor: 'rgba(124, 77, 255, 0.15)', 
-                                        color: themeColors.accent, 
-                                        fontWeight: 'bold', 
-                                        fontFamily: 'monospace',
-                                        border: `1px solid ${themeColors.accent}`
-                                    }} 
-                                />
-                                
-                                <Box>
-                                    <Typography variant="h6" fontWeight="bold" sx={{ mb: 0.5 }}>
-                                        {post.title}
-                                    </Typography>
-                                    <Typography variant="body2" sx={{ color: themeColors.textSecondary }}>
-                                        {post.content}
-                                    </Typography>
-                                </Box>
-                            </Paper>
+                    {loading ? (
+                        // Skeleton Loading
+                        [1, 2, 3].map((i) => (
+                            <Skeleton key={i} variant="rectangular" height={120} sx={{ bgcolor: '#121212', borderRadius: 2 }} />
                         ))
                     ) : (
-                        <Paper sx={{ ...darkCardStyle, padding: 4, textAlign: 'center', borderStyle: 'dashed' }}>
-                            <Typography variant="h6" color="gray">📭 Belum ada data post.</Typography>
-                        </Paper>
+                        // List Data
+                        processedPosts.map((post, index) => (
+                            <Paper 
+                                // PERBAIKAN KEY: Cek id, _id, atau pakai index sebagai fallback terakhir
+                                key={post.id || post._id || index} 
+                                elevation={0}
+                                sx={{ 
+                                    p: 3, 
+                                    bgcolor: '#121212', 
+                                    border: '1px solid #333', 
+                                    borderRadius: 3,
+                                    '&:hover': { borderColor: '#666' } 
+                                }}
+                            >
+                                <Box display="flex" alignItems="center" gap={1} mb={1}>
+                                    <Avatar sx={{ width: 24, height: 24, fontSize: 12, bgcolor: '#333' }}>
+                                        {(post.author?.name || "A")[0].toUpperCase()}
+                                    </Avatar>
+                                    <Typography variant="caption" sx={{ color: '#aaa', fontWeight: 'bold' }}>
+                                        @{post.author?.name || "Unknown"}
+                                    </Typography>
+                                    <Typography variant="caption" sx={{ color: '#555' }}>
+                                        • {post.createdAt ? new Date(post.createdAt).toLocaleDateString() : "-"}
+                                    </Typography>
+                                </Box>
+
+                                {/* INI YANG DIUBAH JADI PUTIH */}
+                                <Typography variant="h6" fontWeight="bold" gutterBottom sx={{ color: 'white' }}>
+                                    {post.title}
+                                </Typography>
+                                
+                                <Typography variant="body2" sx={{ color: '#bbb' }}>
+                                    {post.content}
+                                </Typography>
+                            </Paper>
+                        ))
                     )}
                 </Stack>
 
