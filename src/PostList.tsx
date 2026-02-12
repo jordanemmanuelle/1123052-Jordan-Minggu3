@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-// Import gaya UI Material (Style import satu per satu)
+
 import Box from '@mui/material/Box';
 import Container from '@mui/material/Container';
 import Typography from '@mui/material/Typography';
@@ -10,10 +10,9 @@ import Stack from '@mui/material/Stack';
 import Avatar from '@mui/material/Avatar';
 import Skeleton from '@mui/material/Skeleton';
 
-// --- TIPE DATA ---
 type Post = {
-    id?: string;      // Jaga-jaga kalau API pakai 'id'
-    _id?: string;     // Jaga-jaga kalau API pakai '_id'
+    id?: string;      
+    _id?: string;     
     title: string;
     content: string;
     createdAt: string;
